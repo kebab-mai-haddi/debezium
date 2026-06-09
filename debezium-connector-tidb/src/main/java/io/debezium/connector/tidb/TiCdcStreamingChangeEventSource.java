@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -76,7 +77,7 @@ public class TiCdcStreamingChangeEventSource implements StreamingChangeEventSour
         final TiDbOffsetContext effectiveOffset = this.effectiveOffsetContext;
 
         try (TiCdcEventParser parser = new TiCdcEventParser();
-                KafkaConsumer<byte[], byte[]> consumer = createConsumer()) {
+                Consumer<byte[], byte[]> consumer = createConsumer()) {
 
             seekToStartPosition(consumer, effectiveOffset);
 
@@ -118,14 +119,18 @@ public class TiCdcStreamingChangeEventSource implements StreamingChangeEventSour
                 new TiDbChangeRecordEmitter(partition, offsetContext, clock, connectorConfig, event));
     }
 
-    private KafkaConsumer<byte[], byte[]> createConsumer() {
+    /**
+     * Creates the Kafka consumer reading the TiCDC topics. Visible so that tests can substitute
+     * a mock consumer.
+     */
+    protected Consumer<byte[], byte[]> createConsumer() {
         final Properties props = connectorConfig.getTicdcConsumerProperties();
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
         props.putIfAbsent(ConsumerConfig.CLIENT_ID_CONFIG, "debezium-tidb-" + connectorConfig.getLogicalName());
         return new KafkaConsumer<>(props, new ByteArrayDeserializer(), new ByteArrayDeserializer());
     }
 
-    private void seekToStartPosition(KafkaConsumer<byte[], byte[]> consumer, TiDbOffsetContext offsetContext) {
+    private void seekToStartPosition(Consumer<byte[], byte[]> consumer, TiDbOffsetContext offsetContext) {
         final List<TopicPartition> assignment = new ArrayList<>();
         for (String topic : connectorConfig.getTicdcTopics()) {
             final List<PartitionInfo> partitions = consumer.partitionsFor(topic);
